@@ -1,8 +1,10 @@
 import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path_provider/path_provider.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/file_utils.dart';
 import '../../bloc/transfer/transfer_bloc.dart';
@@ -44,7 +46,7 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error picking file: $e'),
+            content: Text('Error selecting file: $e'),
             backgroundColor: AppColors.failed,
           ),
         );
@@ -52,17 +54,19 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-  /// Helper to generate a dummy ~50MB file directly on device storage for testing large transfers
-  Future<void> _create50MbDummyFile() async {
+  /// Helper to generate a dummy 50MB test catalog file directly on device
+  Future<void> _create50MbDummyCatalog() async {
     setState(() => _isGeneratingDummy = true);
     try {
       final tempDir = await getTemporaryDirectory();
-      final dummyPath = '${tempDir.path}/laan_catalog_50mb.csv';
+      final dummyPath = '${tempDir.path}/pos_catalog_50mb.csv';
       final file = File(dummyPath);
 
-      // Write in chunks to create exactly 50 MB
       final sink = file.openWrite();
-      final chunk = List.filled(1024 * 1024, 'A').join(''); // 1 MB chunk
+      sink.writeln(
+        'SKU,BARCODE,PRODUCT_NAME,CATEGORY,PRICE,STOCK_QTY,TAX_RATE',
+      );
+      final chunk = List.filled(1024 * 1024, 'X').join('');
       for (int i = 0; i < 50; i++) {
         sink.write(chunk);
       }
@@ -72,7 +76,7 @@ class _UploadScreenState extends State<UploadScreen> {
       final length = await file.length();
       setState(() {
         _selectedFilePath = dummyPath;
-        _selectedFileName = 'laan_catalog_50mb.csv';
+        _selectedFileName = 'pos_catalog_50mb.csv';
         _selectedFileSize = length;
         _isGeneratingDummy = false;
       });
@@ -80,7 +84,7 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Generated 50MB test catalog file!'),
+            content: Text('Generated 50MB POS Test Catalog File!'),
             backgroundColor: AppColors.success,
           ),
         );
@@ -90,7 +94,7 @@ class _UploadScreenState extends State<UploadScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error creating dummy file: $e'),
+            content: Text('Error creating test file: $e'),
             backgroundColor: AppColors.failed,
           ),
         );
@@ -102,14 +106,13 @@ class _UploadScreenState extends State<UploadScreen> {
     if (_selectedFilePath == null || _selectedFileName == null) return;
 
     context.read<TransferBloc>().add(
-          StartUploadEvent(
-            filePath: _selectedFilePath!,
-            fileName: _selectedFileName!,
-            fileSize: _selectedFileSize,
-          ),
-        );
+      StartUploadEvent(
+        filePath: _selectedFilePath!,
+        fileName: _selectedFileName!,
+        fileSize: _selectedFileSize,
+      ),
+    );
 
-    // Reset selection after queuing
     setState(() {
       _selectedFilePath = null;
       _selectedFileName = null;
@@ -118,96 +121,138 @@ class _UploadScreenState extends State<UploadScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Upload started! Continues even if you navigate away.'),
-        backgroundColor: AppColors.success,
+        content: Text(
+          'Upload queued into background engine! Continues if minimized.',
+        ),
+        backgroundColor: AppColors.posAccent,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('POS Catalog & Report Upload'),
-      ),
-      body: BlocBuilder<TransferBloc, TransferState>(
-        builder: (context, state) {
-          // Get the most recent active upload or latest upload
-          final activeUploads = state.tasks
-              .where((t) => t.isUpload && (t.isRunning || t.isPaused || t.isQueued))
-              .toList();
+    return BlocBuilder<TransferBloc, TransferState>(
+      builder: (context, state) {
+        final activeUploads = state.tasks
+            .where(
+              (t) => t.isUpload && (t.isRunning || t.isPaused || t.isQueued),
+            )
+            .toList();
 
-          final latestUpload = activeUploads.isNotEmpty
-              ? activeUploads.first
-              : state.tasks.where((t) => t.isUpload).firstOrNull;
-
-          return SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 90),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top Upload Box
+                // POS Section Title
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.posDarkHeader,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.cloud_upload_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CATALOG & INVENTORY INGESTION',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Bulk import product SKU catalogs, inventory dumps & media (>50MB)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // POS INGESTION CONTROL CARD
                 Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border, width: 1.2),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Header & Specs
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withValues(alpha: 0.08),
-                          shape: BoxShape.circle,
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.borderLight),
                         ),
-                        child: const Icon(
-                          Icons.cloud_upload_outlined,
-                          size: 40,
-                          color: AppColors.accent,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        'Upload Large POS Data',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Select product catalogs, inventory CSVs or video logs (>50MB supported). Upload continues in background.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                          height: 1.4,
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.tune_rounded,
+                              size: 16,
+                              color: AppColors.posAccent,
+                            ),
+                            SizedBox(width: 8),
+                            Text(
+                              'TRANSMISSION SPECS: Multipart/Form-Data • Background Stream Buffer',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                fontFamily: 'monospace',
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
 
-                      // Pick Buttons
+                      // Two POS Action Buttons (Pick file / Generate 50MB)
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              icon: const Icon(Icons.attach_file_rounded, size: 18),
-                              label: const Text('Pick File'),
+                              icon: const Icon(
+                                Icons.folder_open_rounded,
+                                size: 18,
+                              ),
+                              label: const Text('SELECT LOCAL FILE'),
                               style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(6),
                                 ),
                               ),
                               onPressed: _pickFile,
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: ElevatedButton.icon(
                               icon: _isGeneratingDummy
@@ -219,67 +264,95 @@ class _UploadScreenState extends State<UploadScreen> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Icon(Icons.note_add_rounded, size: 18),
-                              label: const Text('Dummy 50MB'),
+                                  : const Icon(
+                                      Icons.flash_on_rounded,
+                                      size: 18,
+                                    ),
+                              label: const Text('QUICK 50MB DUMMY'),
                               style: ElevatedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                backgroundColor: AppColors.posOrange,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
                               ),
-                              onPressed: _isGeneratingDummy ? null : _create50MbDummyFile,
+                              onPressed: _isGeneratingDummy
+                                  ? null
+                                  : _create50MbDummyCatalog,
                             ),
                           ),
                         ],
                       ),
 
-                      // Selected File Details Preview
+                      // Selected File Inspector Box
                       if (_selectedFileName != null) ...[
                         const SizedBox(height: 16),
                         Container(
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: AppColors.surfaceMuted,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+                            color: const Color(0xFFF0FDF4),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: AppColors.posOnline,
+                              width: 1.2,
+                            ),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Row(
                                 children: [
-                                  Icon(
-                                    FileUtils.getFileIcon(_selectedFileName!),
-                                    color: AppColors.accent,
-                                    size: 24,
+                                  const Icon(
+                                    Icons.check_circle_rounded,
+                                    color: AppColors.posOnline,
+                                    size: 20,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          _selectedFileName!,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                        Text(
-                                          FileUtils.formatBytes(_selectedFileSize),
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.textSecondary,
-                                          ),
-                                        ),
-                                      ],
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'STAGED FOR TRANSMISSION',
+                                    style: TextStyle(
+                                      color: AppColors.posOnline,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    FileUtils.formatBytes(_selectedFileSize),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13,
+                                      fontFamily: 'monospace',
+                                      color: AppColors.textPrimary,
                                     ),
                                   ),
                                 ],
                               ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _selectedFileName!,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
                               const SizedBox(height: 12),
-                              ElevatedButton(
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.send_rounded, size: 18),
+                                label: const Text(
+                                  'TRANSMIT TO POS SAAS SERVER',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.posDarkHeader,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                ),
                                 onPressed: _startUpload,
-                                child: const Text('Start Multipart Upload'),
                               ),
                             ],
                           ),
@@ -288,70 +361,91 @@ class _UploadScreenState extends State<UploadScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
 
-                // Live Active Upload Card (if any ongoing)
-                if (latestUpload != null && (latestUpload.isRunning || latestUpload.isPaused)) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Current Upload Status',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
+                // ACTIVE POS INGESTION STREAM
+                if (activeUploads.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.posAccent,
                         ),
-                        Text(
-                          latestUpload.isRunning ? 'Active' : 'Paused',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: latestUpload.isRunning ? AppColors.running : AppColors.paused,
-                          ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'ACTIVE TRANSMISSIONS (${activeUploads.length})',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                          color: AppColors.textPrimary,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  TransferItemTile(task: latestUpload),
+                  const SizedBox(height: 8),
+                  ...activeUploads.map((task) => TransferItemTile(task: task)),
+                  const SizedBox(height: 16),
                 ],
 
-                // All Recent Uploads Header
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-                  child: Text(
-                    'Upload History',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-
-                // Upload list
-                ...state.tasks.where((t) => t.isUpload).map(
-                      (task) => TransferItemTile(task: task),
-                    ),
-
-                if (state.tasks.where((t) => t.isUpload).isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                      child: Text(
-                        'No uploads yet. Pick a file or generate 50MB test file to begin.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textMuted),
+                // POS INGESTION LOG / HISTORY TABLE
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'INGESTION AUDIT HISTORY',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                        color: AppColors.textPrimary,
                       ),
                     ),
-                  ),
+                    Text(
+                      'TOTAL: ${state.tasks.where((t) => t.isUpload).length} JOBS',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                if (state.tasks.where((t) => t.isUpload).isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'No catalog ingestion jobs executed yet.',
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ...state.tasks
+                      .where((t) => t.isUpload)
+                      .map((task) => TransferItemTile(task: task)),
               ],
             ),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }

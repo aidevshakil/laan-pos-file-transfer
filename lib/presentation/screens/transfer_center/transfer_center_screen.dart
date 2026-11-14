@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/file_utils.dart';
 import '../../bloc/transfer/transfer_bloc.dart';
 import '../../bloc/transfer/transfer_event.dart';
 import '../../bloc/transfer/transfer_state.dart';
@@ -31,157 +33,267 @@ class _TransferCenterScreenState extends State<TransferCenterScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Transfer Operations Center'),
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: AppColors.accent,
-          unselectedLabelColor: AppColors.textSecondary,
-          indicatorColor: AppColors.accent,
-          indicatorWeight: 3,
-          tabs: const [
-            Tab(text: 'Active'),
-            Tab(text: 'Completed'),
-            Tab(text: 'Failed / Paused'),
-          ],
-        ),
-      ),
-      body: BlocBuilder<TransferBloc, TransferState>(
-        builder: (context, state) {
-          final activeTasks = state.activeTasks;
-          final completedTasks =
-              state.tasks.where((t) => t.isCompleted).toList();
-          final failedOrPausedTasks =
-              state.tasks.where((t) => t.isFailed || t.isPaused).toList();
+    return BlocBuilder<TransferBloc, TransferState>(
+      builder: (context, state) {
+        final activeTasks = state.activeTasks;
+        final completedTasks = state.tasks.where((t) => t.isCompleted).toList();
+        final failedOrPausedTasks = state.tasks
+            .where((t) => t.isFailed || t.isPaused)
+            .toList();
 
-          return Column(
-            children: [
-              // Summary Metrics Header
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
+        // Calculate total aggregate speed
+        final totalSpeed = activeTasks.fold(
+          0.0,
+          (sum, t) => sum + (t.isRunning ? t.speedBytesPerSec : 0.0),
+        );
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // POS Console Header
+                Row(
                   children: [
-                    _buildMetricCard(
-                      'Active',
-                      '${activeTasks.length}',
-                      AppColors.running,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.posDarkHeader,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.sync_alt_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
-                    _buildDivider(),
-                    _buildMetricCard(
-                      'Completed',
-                      '${completedTasks.length}',
-                      AppColors.success,
-                    ),
-                    _buildDivider(),
-                    _buildMetricCard(
-                      'Issues',
-                      '${failedOrPausedTasks.length}',
-                      AppColors.failed,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'TERMINAL DATA SYNC CONSOLE',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'Background pipeline management, bandwidth monitoring & resilience',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 16),
 
-              // Tab views
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
+                // POS TELEMETRY HUD / METRICS GRID
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppColors.border, width: 1.2),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildTelemetryCell(
+                        title: 'ACTIVE PIPES',
+                        value: '${activeTasks.length}',
+                        caption: 'Background Jobs',
+                        color: AppColors.posAccent,
+                      ),
+                      _buildDivider(),
+                      _buildTelemetryCell(
+                        title: 'BANDWIDTH',
+                        value: FileUtils.formatSpeed(totalSpeed),
+                        caption: 'Live Transfer Rate',
+                        color: totalSpeed > 0
+                            ? AppColors.posOnline
+                            : AppColors.textSecondary,
+                      ),
+                      _buildDivider(),
+                      _buildTelemetryCell(
+                        title: 'COMPLETED',
+                        value: '${completedTasks.length}',
+                        caption: 'Synced Files',
+                        color: AppColors.posOnline,
+                      ),
+                      _buildDivider(),
+                      _buildTelemetryCell(
+                        title: 'ATTENTION',
+                        value: '${failedOrPausedTasks.length}',
+                        caption: 'Paused / Failed',
+                        color: failedOrPausedTasks.isNotEmpty
+                            ? AppColors.failed
+                            : AppColors.textMuted,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // POS BULK CONTROLS BAR
+                Row(
                   children: [
-                    // Active Tasks Tab
-                    _buildTaskList(
-                      activeTasks,
-                      emptyMessage: 'No background transfers currently running.',
-                      emptyIcon: Icons.check_circle_outline_rounded,
-                      actionButtons: activeTasks.isNotEmpty
-                          ? Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                              child: Row(
-                                children: [
-                                  OutlinedButton.icon(
-                                    icon: const Icon(Icons.pause_rounded, size: 16),
-                                    label: const Text('Pause All'),
-                                    onPressed: () {
-                                      for (var t in activeTasks) {
-                                        if (t.isRunning) {
-                                          context
-                                              .read<TransferBloc>()
-                                              .add(PauseTransferEvent(taskId: t.id));
-                                        }
-                                      }
-                                    },
-                                  ),
-                                  const SizedBox(width: 10),
-                                  OutlinedButton.icon(
-                                    icon: const Icon(Icons.play_arrow_rounded, size: 16),
-                                    label: const Text('Resume All'),
-                                    onPressed: () {
-                                      for (var t in activeTasks) {
-                                        if (t.isPaused) {
-                                          context
-                                              .read<TransferBloc>()
-                                              .add(ResumeTransferEvent(taskId: t.id));
-                                        }
-                                      }
-                                    },
-                                  ),
-                                ],
-                              ),
-                            )
-                          : null,
+                    ElevatedButton.icon(
+                      icon: const Icon(
+                        Icons.pause_circle_outline_rounded,
+                        size: 16,
+                      ),
+                      label: const Text('FREEZE ALL PIPES'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.posSidebar,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: activeTasks.isEmpty
+                          ? null
+                          : () {
+                              for (var t in activeTasks) {
+                                if (t.isRunning) {
+                                  context.read<TransferBloc>().add(
+                                    PauseTransferEvent(taskId: t.id),
+                                  );
+                                }
+                              }
+                            },
                     ),
-
-                    // Completed Tasks Tab
-                    _buildTaskList(
-                      completedTasks,
-                      emptyMessage: 'No completed transfers yet.',
-                      emptyIcon: Icons.cloud_done_rounded,
-                    ),
-
-                    // Failed or Paused Tasks Tab
-                    _buildTaskList(
-                      failedOrPausedTasks,
-                      emptyMessage: 'No failed or paused transfers.',
-                      emptyIcon: Icons.thumb_up_alt_outlined,
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      icon: const Icon(
+                        Icons.play_circle_outline_rounded,
+                        size: 16,
+                      ),
+                      label: const Text('RESUME ALL'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                      ),
+                      onPressed: failedOrPausedTasks.isEmpty
+                          ? null
+                          : () {
+                              for (var t in failedOrPausedTasks) {
+                                if (t.isPaused) {
+                                  context.read<TransferBloc>().add(
+                                    ResumeTransferEvent(taskId: t.id),
+                                  );
+                                }
+                              }
+                            },
                     ),
                   ],
                 ),
-              ),
-            ],
-          );
-        },
-      ),
+                const SizedBox(height: 14),
+
+                // POS TAB BAR
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: AppColors.textSecondary,
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicator: BoxDecoration(
+                      color: AppColors.posDarkHeader,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    labelStyle: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.5,
+                    ),
+                    tabs: [
+                      Tab(text: 'ACTIVE (${activeTasks.length})'),
+                      Tab(text: 'COMPLETED ARCHIVE (${completedTasks.length})'),
+                      Tab(
+                        text: 'ISSUES / PAUSED (${failedOrPausedTasks.length})',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // TAB CONTENT
+                Expanded(
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTaskList(
+                        activeTasks,
+                        emptyMessage:
+                            'No background transfers currently running.',
+                      ),
+                      _buildTaskList(
+                        completedTasks,
+                        emptyMessage: 'No completed sync jobs archived.',
+                      ),
+                      _buildTaskList(
+                        failedOrPausedTasks,
+                        emptyMessage:
+                            'All pipes healthy. No errors or paused jobs.',
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  Widget _buildMetricCard(String label, String value, Color color) {
+  Widget _buildTelemetryCell({
+    required String title,
+    required String value,
+    required String caption,
+    required Color color,
+  }) {
     return Expanded(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            value,
-            style: TextStyle(
-              fontSize: 22,
+            title,
+            style: const TextStyle(
+              fontSize: 10,
               fontWeight: FontWeight.w800,
-              color: color,
+              letterSpacing: 0.5,
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 2),
           Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              fontFamily: 'monospace',
+              color: color,
             ),
+          ),
+          Text(
+            caption,
+            style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
           ),
         ],
       ),
@@ -190,44 +302,39 @@ class _TransferCenterScreenState extends State<TransferCenterScreen>
 
   Widget _buildDivider() {
     return Container(
-      height: 30,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      height: 36,
       width: 1,
-      color: AppColors.border,
+      color: AppColors.borderLight,
     );
   }
 
-  Widget _buildTaskList(
-    List tasks, {
-    required String emptyMessage,
-    required IconData emptyIcon,
-    Widget? actionButtons,
-  }) {
+  Widget _buildTaskList(List tasks, {required String emptyMessage}) {
     if (tasks.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(emptyIcon, size: 48, color: AppColors.textMuted),
-            const SizedBox(height: 12),
-            Text(
-              emptyMessage,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Center(
+          child: Text(
+            emptyMessage,
+            style: const TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
-          ],
+          ),
         ),
       );
     }
 
     return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        ?actionButtons,
-        ...tasks.map((task) => TransferItemTile(task: task)),
-      ],
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
+      children: [...tasks.map((task) => TransferItemTile(task: task))],
     );
   }
 }
