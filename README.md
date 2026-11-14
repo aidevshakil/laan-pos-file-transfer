@@ -129,11 +129,13 @@ With more time, the following enhancements could be incorporated:
    flutter run
    ```
 
-5. **Build Release APK:**
+5. **Build Release APK (Split Per ABI):**
    ```bash
-   flutter build apk --release
+   flutter build apk --target-platform android-arm,android-arm64 --split-per-abi
    ```
-   *The generated APK will be located at: `build/app/outputs/flutter-apk/app-release.apk`.*
+   *Generated optimized split APKs:*
+   - **ARM 64-bit (Modern Android & POS Devices):** `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk` (17.8 MB)
+   - **ARM 32-bit (Legacy POS Devices):** `build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk` (15.4 MB)
 
 ### Testing Tips:
 - **Login Screen:** Use credentials `admin` / `admin` or tap **"Continue in Demo / Offline Mode"** to test UI flows even without server reachability.
