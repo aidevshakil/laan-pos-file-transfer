@@ -49,7 +49,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           });
         },
         backgroundColor: AppColors.surface,
-        indicatorColor: AppColors.accent.withOpacity(0.12),
+        indicatorColor: AppColors.accent.withValues(alpha: 0.12),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.cloud_upload_outlined),

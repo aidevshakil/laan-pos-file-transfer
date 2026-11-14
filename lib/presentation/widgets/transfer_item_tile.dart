@@ -64,7 +64,7 @@ class TransferItemTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -95,7 +95,7 @@ class TransferItemTile extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: statusColor.withOpacity(0.1),
+                            color: statusColor.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -174,10 +174,11 @@ class TransferItemTile extends StatelessWidget {
                       color: AppColors.success,
                       tooltip: 'Open File',
                       onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
                         try {
                           await OpenFilex.open(task.localFilePath);
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(content: Text('Cannot open file: $e')),
                           );
                         }
@@ -229,7 +230,7 @@ class TransferItemTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.failed.withOpacity(0.08),
+                color: AppColors.failed.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(

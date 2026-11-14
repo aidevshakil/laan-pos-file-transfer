@@ -5,7 +5,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/file_utils.dart';
-import '../../../domain/entities/transfer_task.dart';
 import '../../bloc/transfer/transfer_bloc.dart';
 import '../../bloc/transfer/transfer_event.dart';
 import '../../bloc/transfer/transfer_state.dart';
@@ -162,7 +161,7 @@ class _UploadScreenState extends State<UploadScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: AppColors.accent.withOpacity(0.08),
+                          color: AppColors.accent.withValues(alpha: 0.08),
                           shape: BoxShape.circle,
                         ),
                         child: const Icon(
@@ -239,7 +238,7 @@ class _UploadScreenState extends State<UploadScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.surfaceMuted,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.accent.withOpacity(0.3)),
+                            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,

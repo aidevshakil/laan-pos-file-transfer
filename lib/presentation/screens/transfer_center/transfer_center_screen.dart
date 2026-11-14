@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/utils/file_utils.dart';
 import '../../bloc/transfer/transfer_bloc.dart';
 import '../../bloc/transfer/transfer_event.dart';
 import '../../bloc/transfer/transfer_state.dart';
@@ -226,7 +225,7 @@ class _TransferCenterScreenState extends State<TransferCenterScreen>
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
-        if (actionButtons != null) actionButtons,
+        ?actionButtons,
         ...tasks.map((task) => TransferItemTile(task: task)),
       ],
     );
