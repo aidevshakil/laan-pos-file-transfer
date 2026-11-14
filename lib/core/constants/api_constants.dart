@@ -9,6 +9,9 @@ class ApiConstants {
   /// Auth token endpoint: POST /token
   static const String tokenEndpoint = '/token';
 
+  /// Register endpoint: POST /register
+  static const String registerEndpoint = '/register';
+
   /// File list / Download endpoint: GET /get (or GET /get?file=NAME)
   static const String getFilesEndpoint = '/get';
 

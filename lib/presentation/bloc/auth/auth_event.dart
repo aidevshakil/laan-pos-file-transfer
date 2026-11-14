@@ -19,4 +19,14 @@ class LoginSubmitted extends AuthEvent {
   List<Object?> get props => [username, password];
 }
 
+class RegisterSubmitted extends AuthEvent {
+  final String username;
+  final String password;
+
+  const RegisterSubmitted({required this.username, required this.password});
+
+  @override
+  List<Object?> get props => [username, password];
+}
+
 class LogoutRequested extends AuthEvent {}

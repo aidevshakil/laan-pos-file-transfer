@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../bloc/auth/auth_bloc.dart';
@@ -16,38 +15,65 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  bool _isRegisterMode = false;
+
   final _usernameController = TextEditingController(text: 'admin');
   final _passwordController = TextEditingController(text: 'admin');
+  final _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   void _submit() {
     if (_formKey.currentState?.validate() ?? false) {
-      context.read<AuthBloc>().add(
-        LoginSubmitted(
-          username: _usernameController.text.trim(),
-          password: _passwordController.text.trim(),
-        ),
-      );
+      final username = _usernameController.text.trim();
+      final password = _passwordController.text.trim();
+
+      if (_isRegisterMode) {
+        if (password != _confirmPasswordController.text.trim()) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Passwords do not match!'),
+              backgroundColor: AppColors.failed,
+            ),
+          );
+          return;
+        }
+        context.read<AuthBloc>().add(
+              RegisterSubmitted(username: username, password: password),
+            );
+      } else {
+        context.read<AuthBloc>().add(
+              LoginSubmitted(username: username, password: password),
+            );
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B132B), // Deep POS Industrial Dark
+      backgroundColor: const Color(0xFF0B132B),
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
             );
+          } else if (state is AuthRegistrationSuccess) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message),
+                backgroundColor: AppColors.posOnline,
+              ),
+            );
+            setState(() => _isRegisterMode = false);
           } else if (state is AuthFailure) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -63,21 +89,15 @@ class _LoginScreenState extends State<LoginScreen> {
           return SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 20,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
+                  constraints: const BoxConstraints(maxWidth: 440),
                   child: Container(
                     padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
                       color: AppColors.posDarkHeader,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: const Color(0xFF334155),
-                        width: 1.5,
-                      ),
+                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.4),
@@ -95,19 +115,14 @@ class _LoginScreenState extends State<LoginScreen> {
                           // Terminal Badge
                           Center(
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF1E293B),
                                 borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: const Color(0xFF475569),
-                                ),
+                                border: Border.all(color: const Color(0xFF475569)),
                               ),
                               child: const Text(
-                                'POS REGISTER #04 • FIRMWARE v1.0',
+                                'POS REGISTER #04 • AUTH SUBSYSTEM',
                                 style: TextStyle(
                                   color: Color(0xFF94A3B8),
                                   fontSize: 10,
@@ -120,20 +135,16 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Terminal Brand Header
+                          // Brand Header
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  color: AppColors.posAccent.withValues(
-                                    alpha: 0.2,
-                                  ),
+                                  color: AppColors.posAccent.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                    color: AppColors.posAccent,
-                                  ),
+                                  border: Border.all(color: AppColors.posAccent),
                                 ),
                                 child: const Icon(
                                   Icons.point_of_sale_rounded,
@@ -167,32 +178,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
 
                           // Server Node Telemetry Box
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 8,
-                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             decoration: BoxDecoration(
                               color: const Color(0xFF0F172A),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: const Color(0xFF1E293B),
-                              ),
+                              border: Border.all(color: const Color(0xFF1E293B)),
                             ),
                             child: const Row(
                               children: [
-                                Icon(
-                                  Icons.cloud_sync_rounded,
-                                  size: 14,
-                                  color: AppColors.posAccent,
-                                ),
+                                Icon(Icons.cloud_sync_rounded,
+                                    size: 14, color: AppColors.posAccent),
                                 SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    'NODE: ${ApiConstants.defaultBaseUrl}',
+                                    'MOCK SERVER: ${ApiConstants.defaultBaseUrl}',
                                     style: TextStyle(
                                       color: Color(0xFFCBD5E1),
                                       fontSize: 11,
@@ -204,7 +207,76 @@ class _LoginScreenState extends State<LoginScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
+
+                          // Mode Switcher: LOGIN vs REGISTER (As per Assessment Requirement)
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: () => setState(() => _isRegisterMode = false),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: !_isRegisterMode
+                                            ? AppColors.posAccent
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'LOG IN',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: !_isRegisterMode
+                                              ? Colors.white
+                                              : const Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: () => setState(() => _isRegisterMode = true),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: _isRegisterMode
+                                            ? AppColors.posAccent
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        'REGISTER FIRST',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _isRegisterMode
+                                              ? Colors.white
+                                              : const Color(0xFF94A3B8),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
 
                           // Username / Operator ID
                           TextFormField(
@@ -215,27 +287,24 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                             decoration: InputDecoration(
-                              labelText: 'OPERATOR ID / USERNAME',
+                              labelText: _isRegisterMode
+                                  ? 'NEW USERNAME / OPERATOR ID'
+                                  : 'OPERATOR ID / USERNAME',
                               labelStyle: const TextStyle(
                                 color: Color(0xFF94A3B8),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.5,
                               ),
-                              prefixIcon: const Icon(
-                                Icons.badge_rounded,
-                                color: Color(0xFF94A3B8),
-                              ),
+                              prefixIcon:
+                                  const Icon(Icons.badge_rounded, color: Color(0xFF94A3B8)),
                               fillColor: const Color(0xFF1E293B),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF334155),
-                                ),
+                                borderSide: const BorderSide(color: Color(0xFF334155)),
                               ),
                             ),
-                            validator: (v) =>
-                                v == null || v.isEmpty ? 'Required' : null,
+                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                           ),
                           const SizedBox(height: 14),
 
@@ -249,35 +318,66 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                             decoration: InputDecoration(
-                              labelText: 'SECURITY PIN / PASSWORD',
+                              labelText: _isRegisterMode
+                                  ? 'CHOOSE PASSWORD'
+                                  : 'SECURITY PIN / PASSWORD',
                               labelStyle: const TextStyle(
                                 color: Color(0xFF94A3B8),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 0.5,
                               ),
-                              prefixIcon: const Icon(
-                                Icons.lock_rounded,
-                                color: Color(0xFF94A3B8),
-                              ),
+                              prefixIcon:
+                                  const Icon(Icons.lock_rounded, color: Color(0xFF94A3B8)),
                               fillColor: const Color(0xFF1E293B),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(
-                                  color: Color(0xFF334155),
-                                ),
+                                borderSide: const BorderSide(color: Color(0xFF334155)),
                               ),
                             ),
-                            validator: (v) =>
-                                v == null || v.isEmpty ? 'Required' : null,
+                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                           ),
+
+                          // Confirm Password field for Register mode
+                          if (_isRegisterMode) ...[
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _confirmPasswordController,
+                              obscureText: true,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'monospace',
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: 'CONFIRM PASSWORD',
+                                labelStyle: const TextStyle(
+                                  color: Color(0xFF94A3B8),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                                prefixIcon: const Icon(Icons.lock_outline_rounded,
+                                    color: Color(0xFF94A3B8)),
+                                fillColor: const Color(0xFF1E293B),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                  borderSide: const BorderSide(color: Color(0xFF334155)),
+                                ),
+                              ),
+                              validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                            ),
+                          ],
+
                           const SizedBox(height: 22),
 
-                          // Authenticate Button
+                          // Submit Action Button
                           ElevatedButton(
                             onPressed: isLoading ? null : _submit,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.posAccent,
+                              backgroundColor: _isRegisterMode
+                                  ? AppColors.posOrange
+                                  : AppColors.posAccent,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(6),
@@ -292,9 +392,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text(
-                                    'AUTHENTICATE TERMINAL ➔',
-                                    style: TextStyle(
+                                : Text(
+                                    _isRegisterMode
+                                        ? 'REGISTER ACCOUNT & SIGN IN ➔'
+                                        : 'AUTHENTICATE & GET TOKEN ➔',
+                                    style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.w800,
                                       letterSpacing: 0.5,

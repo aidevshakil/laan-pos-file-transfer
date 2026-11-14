@@ -4,12 +4,38 @@ import 'dart:developer' as developer;
 
 abstract class AuthRemoteDataSource {
   Future<String> login(String username, String password);
+  Future<void> register(String username, String password);
 }
 
 class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   final Dio dio;
 
   AuthRemoteDataSourceImpl({required this.dio});
+
+  @override
+  Future<void> register(String username, String password) async {
+    try {
+      final response = await dio.post(
+        '${ApiConstants.defaultBaseUrl}${ApiConstants.registerEndpoint}',
+        data: {
+          'username': username,
+          'password': password,
+        },
+        options: Options(
+          contentType: Headers.formUrlEncodedContentType,
+        ),
+      );
+
+      developer.log('Register Response: ${response.statusCode} -> ${response.data}');
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Registration failed with status code ${response.statusCode}');
+      }
+    } on DioException catch (e) {
+      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Registration network error';
+      throw Exception('Registration failed: $errorMsg');
+    }
+  }
 
   @override
   Future<String> login(String username, String password) async {
