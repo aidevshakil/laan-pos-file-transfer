@@ -1,5 +1,8 @@
 import 'package:equatable/equatable.dart';
+
+import '../../../core/errors/transfer_exception.dart';
 import '../../../domain/entities/remote_file.dart';
+import '../../../domain/entities/upload_result.dart';
 
 abstract class TransferEvent extends Equatable {
   const TransferEvent();
@@ -7,6 +10,8 @@ abstract class TransferEvent extends Equatable {
   @override
   List<Object?> get props => [];
 }
+
+class RestoreTransfers extends TransferEvent {}
 
 class LoadRemoteFiles extends TransferEvent {}
 
@@ -34,41 +39,35 @@ class StartDownloadEvent extends TransferEvent {
   List<Object?> get props => [remoteFile];
 }
 
-class PauseTransferEvent extends TransferEvent {
+class _TaskEvent extends TransferEvent {
   final String taskId;
-
-  const PauseTransferEvent({required this.taskId});
+  const _TaskEvent(this.taskId);
 
   @override
   List<Object?> get props => [taskId];
 }
 
-class ResumeTransferEvent extends TransferEvent {
-  final String taskId;
-
-  const ResumeTransferEvent({required this.taskId});
-
-  @override
-  List<Object?> get props => [taskId];
+class PauseTransferEvent extends _TaskEvent {
+  const PauseTransferEvent({required String taskId}) : super(taskId);
 }
 
-class RetryTransferEvent extends TransferEvent {
-  final String taskId;
-
-  const RetryTransferEvent({required this.taskId});
-
-  @override
-  List<Object?> get props => [taskId];
+class ResumeTransferEvent extends _TaskEvent {
+  const ResumeTransferEvent({required String taskId}) : super(taskId);
 }
 
-class CancelTransferEvent extends TransferEvent {
-  final String taskId;
-
-  const CancelTransferEvent({required this.taskId});
-
-  @override
-  List<Object?> get props => [taskId];
+class RetryTransferEvent extends _TaskEvent {
+  const RetryTransferEvent({required String taskId}) : super(taskId);
 }
+
+class CancelTransferEvent extends _TaskEvent {
+  const CancelTransferEvent({required String taskId}) : super(taskId);
+}
+
+class PauseAllTransfers extends TransferEvent {}
+
+class ResumeAllTransfers extends TransferEvent {}
+
+class ClearFinishedTransfers extends TransferEvent {}
 
 class DeleteRemoteFileEvent extends TransferEvent {
   final String fileName;
@@ -79,46 +78,40 @@ class DeleteRemoteFileEvent extends TransferEvent {
   List<Object?> get props => [fileName];
 }
 
-class UpdateTransferProgressEvent extends TransferEvent {
-  final String taskId;
+class TransferProgressed extends _TaskEvent {
+  final int runId;
   final int transferredBytes;
   final int totalBytes;
   final double speedBytesPerSec;
 
-  const UpdateTransferProgressEvent({
-    required this.taskId,
+  const TransferProgressed({
+    required String taskId,
+    required this.runId,
     required this.transferredBytes,
     required this.totalBytes,
     required this.speedBytesPerSec,
-  });
+  }) : super(taskId);
 
   @override
-  List<Object?> get props => [
-        taskId,
-        transferredBytes,
-        totalBytes,
-        speedBytesPerSec,
-      ];
+  List<Object?> get props => [taskId, runId, transferredBytes, totalBytes, speedBytesPerSec];
 }
 
-class TransferCompletedEvent extends TransferEvent {
-  final String taskId;
+class TransferSucceeded extends _TaskEvent {
+  final int runId;
+  final UploadResult? uploadResult;
 
-  const TransferCompletedEvent({required this.taskId});
-
-  @override
-  List<Object?> get props => [taskId];
+  const TransferSucceeded({required String taskId, required this.runId, this.uploadResult})
+      : super(taskId);
 }
 
-class TransferFailedEvent extends TransferEvent {
-  final String taskId;
-  final String errorMessage;
+class TransferErrored extends _TaskEvent {
+  final int runId;
+  final TransferException error;
 
-  const TransferFailedEvent({
-    required this.taskId,
-    required this.errorMessage,
-  });
+  const TransferErrored({required String taskId, required this.runId, required this.error})
+      : super(taskId);
+}
 
-  @override
-  List<Object?> get props => [taskId, errorMessage];
+class AutoRetryFired extends _TaskEvent {
+  const AutoRetryFired({required String taskId}) : super(taskId);
 }

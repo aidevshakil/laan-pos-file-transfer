@@ -1,36 +1,33 @@
 import '../../domain/repositories/auth_repository.dart';
 import '../datasources/auth_remote_datasource.dart';
+import '../datasources/local_storage.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
-  String? _token;
+  final LocalStorage storage;
 
-  AuthRepositoryImpl({required this.remoteDataSource});
+  AuthRepositoryImpl({required this.remoteDataSource, required this.storage});
 
   @override
-  Future<void> register({required String username, required String password}) async {
-    await remoteDataSource.register(username, password);
-  }
+  Future<void> register({required String username, required String password}) =>
+      remoteDataSource.register(username, password);
 
   @override
   Future<String> login({required String username, required String password}) async {
     final token = await remoteDataSource.login(username, password);
-    _token = token;
+    await storage.saveSession(token, username);
     return token;
   }
 
   @override
-  Future<void> logout() async {
-    _token = null;
-  }
+  Future<void> logout() => storage.clearSession();
 
   @override
-  Future<String?> getSavedToken() async {
-    return _token;
-  }
+  Future<String?> getSavedToken() async => storage.token;
 
   @override
-  Future<bool> isAuthenticated() async {
-    return _token != null && _token!.isNotEmpty;
-  }
+  Future<String?> getUsername() async => storage.username;
+
+  @override
+  Future<bool> isAuthenticated() async => (storage.token ?? '').isNotEmpty;
 }

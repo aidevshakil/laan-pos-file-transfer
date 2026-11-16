@@ -1,39 +1,54 @@
 import 'package:flutter/material.dart';
 
-/// Industrial POS (Point of Sale) Enterprise Color Palette.
-/// High contrast, tactile, optimized for retail counters and handheld POS screens.
 class AppColors {
   AppColors._();
 
-  // POS Base Terminal Colors (Dark Slate / High Contrast)
-  static const Color posDarkHeader = Color(0xFF0F172A); // Slate 900
-  static const Color posSidebar = Color(0xFF1E293B);    // Slate 800
-  static const Color posSidebarActive = Color(0xFF334155); // Slate 700
+  static const Color primary = Color(0xFF2F5BEA);
+  static const Color primaryDark = Color(0xFF1E3FBF);
+  static const Color primarySoft = Color(0xFFEAF0FF);
+  static const Color violet = Color(0xFF6D5DF6);
+  static const Color violetSoft = Color(0xFFF0EDFF);
+  static const Color ink = Color(0xFF0E1B4D);
+  static const Color inkSoft = Color(0xFF1B2C6B);
 
-  static const Color background = Color(0xFFF1F5F9);    // Slate 100
+  static const LinearGradient brandGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF2F5BEA), Color(0xFF6D5DF6)],
+  );
+  static const LinearGradient heroGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0E1B4D), Color(0xFF1E3A9A)],
+  );
+  static const LinearGradient splashGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF1238C9), Color(0xFF0E1B4D)],
+  );
+
+  static const Color background = Color(0xFFF5F6FD);
   static const Color surface = Colors.white;
-  static const Color surfaceMuted = Color(0xFFF8FAFC);  // Slate 50
-  static const Color surfaceCard = Colors.white;
+  static const Color surfaceMuted = Color(0xFFF7F8FC);
 
-  // POS Brand Accents
-  static const Color posAccent = Color(0xFF0284C7);     // Terminal Sky Blue
-  static const Color posAccentDark = Color(0xFF0369A1);
-  static const Color posOrange = Color(0xFFF97316);     // Retail Action Orange
+  static const Color textPrimary = Color(0xFF111A3A);
+  static const Color textSecondary = Color(0xFF59627E);
+  static const Color textMuted = Color(0xFF9AA2BA);
 
-  // High-contrast Typography
-  static const Color textPrimary = Color(0xFF0F172A);
-  static const Color textSecondary = Color(0xFF475569);
-  static const Color textMuted = Color(0xFF94A3B8);
+  static const Color border = Color(0xFFE6E9F4);
+  static const Color borderStrong = Color(0xFFD3D8EA);
 
-  // Borders & Dividers
-  static const Color border = Color(0xFFCBD5E1);
-  static const Color borderLight = Color(0xFFE2E8F0);
+  static const Color running = primary;
+  static const Color success = Color(0xFF16A34A);
+  static const Color successSoft = Color(0xFFEAF8EF);
+  static const Color warning = Color(0xFFD97706);
+  static const Color warningSoft = Color(0xFFFFF7E6);
+  static const Color danger = Color(0xFFE5484D);
+  static const Color dangerSoft = Color(0xFFFFEEEE);
+  static const Color neutral = Color(0xFF6B7393);
 
-  // POS Status Indicators (Terminal Telemetry)
-  static const Color posOnline = Color(0xFF10B981);     // Emerald green
-  static const Color running = Color(0xFF0284C7);       // Active sync blue
-  static const Color paused = Color(0xFFF59E0B);        // Amber warning
-  static const Color failed = Color(0xFFEF4444);        // Error red
-  static const Color queued = Color(0xFF64748B);        // Queued slate
-  static const Color success = Color(0xFF10B981);       // Success
+  static const Color upload = primary;
+  static const Color uploadSoft = primarySoft;
+  static const Color download = violet;
+  static const Color downloadSoft = violetSoft;
 }

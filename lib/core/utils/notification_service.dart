@@ -1,131 +1,133 @@
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'dart:developer' as developer;
+
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import '../services/app_navigation.dart';
 
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
-  final FlutterLocalNotificationsPlugin _notificationsPlugin =
-      FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
-  static const String channelId = 'laan_pos_transfers';
-  static const String channelName = 'POS Transfers';
-  static const String channelDescription =
-      'Notifications for POS file uploads and downloads';
+  static const String progressChannelId = 'laan_pos_transfer_progress';
+  static const String resultChannelId = 'laan_pos_transfer_result';
 
-  Function(String?)? onNotificationTapped;
+  String? launchPayload;
 
   Future<void> initialize() async {
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
+    const initSettings = InitializationSettings(
+      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      iOS: DarwinInitializationSettings(),
     );
 
-    const InitializationSettings initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _notificationsPlugin.initialize(
+    await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        developer.log('Notification tapped with payload: ${response.payload}');
-        if (onNotificationTapped != null) {
-          onNotificationTapped!(response.payload);
-        }
+      onDidReceiveNotificationResponse: (response) {
+        developer.log('Notification tapped: ${response.payload}');
+        AppNavigation.instance.handlePayload(response.payload);
       },
     );
 
-    // Create Notification Channel for Android 8.0+
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
-      channelId,
-      channelName,
-      description: channelDescription,
-      importance: Importance.low, // Low sound so progress updates don't beep repeatedly
-      showBadge: false,
-    );
+    final launch = await _plugin.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp ?? false) {
+      launchPayload = launch!.notificationResponse?.payload;
+    }
 
-    final androidImplementation =
-        _notificationsPlugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-
-    if (androidImplementation != null) {
-      await androidImplementation.createNotificationChannel(channel);
-      await androidImplementation.requestNotificationsPermission();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      await android.createNotificationChannel(const AndroidNotificationChannel(
+        progressChannelId,
+        'Transfer progress',
+        description: 'Live progress of uploads and downloads',
+        importance: Importance.low,
+        showBadge: false,
+      ));
+      await android.createNotificationChannel(const AndroidNotificationChannel(
+        resultChannelId,
+        'Transfer results',
+        description: 'Shown when an upload or download finishes or fails',
+        importance: Importance.high,
+      ));
+      await android.requestNotificationsPermission();
     }
   }
 
-  /// Show or update a transfer progress notification
-  Future<void> showProgressNotification({
-    required int id,
+  static int progressIdFor(String taskId) => (taskId.hashCode & 0x3fffffff) * 2 % 0x7ffffffe;
+  static int resultIdFor(String taskId) => progressIdFor(taskId) + 1;
+
+  Future<void> showProgress({
+    required String taskId,
     required String title,
     required String body,
-    required int progress,
-    required int maxProgress,
+    required int percent,
+    required String payload,
+    bool indeterminate = false,
   }) async {
-    final AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      channelId,
-      channelName,
-      channelDescription: channelDescription,
+    final details = AndroidNotificationDetails(
+      progressChannelId,
+      'Transfer progress',
       importance: Importance.low,
       priority: Priority.low,
       showProgress: true,
-      maxProgress: maxProgress,
-      progress: progress,
-      ongoing: true, // User cannot swipe away while running
+      maxProgress: 100,
+      progress: percent.clamp(0, 100),
+      indeterminate: indeterminate,
+      ongoing: true,
       autoCancel: false,
       onlyAlertOnce: true,
+      category: AndroidNotificationCategory.progress,
     );
-
-    final NotificationDetails details =
-        NotificationDetails(android: androidDetails);
-
-    await _notificationsPlugin.show(id, title, body, details);
+    await _safe(() => _plugin.show(
+          progressIdFor(taskId),
+          title,
+          body,
+          NotificationDetails(android: details),
+          payload: payload,
+        ));
   }
 
-  /// Show completion notification in system tray.
-  /// Tapping returns user to app with payload.
-  Future<void> showCompletionNotification({
-    required int id,
+  Future<void> showResult({
+    required String taskId,
     required String title,
     required String body,
-    String? payload,
+    required String payload,
   }) async {
-    // Dismiss ongoing progress notification first
-    await _notificationsPlugin.cancel(id);
-
-    final AndroidNotificationDetails androidDetails =
-        AndroidNotificationDetails(
-      channelId,
-      channelName,
-      channelDescription: channelDescription,
+    await cancelProgress(taskId);
+    final details = AndroidNotificationDetails(
+      resultChannelId,
+      'Transfer results',
       importance: Importance.high,
       priority: Priority.high,
-      ongoing: false,
       autoCancel: true,
       styleInformation: BigTextStyleInformation(body),
     );
-
-    final NotificationDetails details =
-        NotificationDetails(android: androidDetails);
-
-    await _notificationsPlugin.show(
-      id + 1000, // separate ID so it doesn't collide
-      title,
-      body,
-      details,
-      payload: payload,
-    );
+    await _safe(() => _plugin.show(
+          resultIdFor(taskId),
+          title,
+          body,
+          NotificationDetails(
+            android: details,
+            iOS: const DarwinNotificationDetails(),
+          ),
+          payload: payload,
+        ));
   }
 
-  /// Cancel a specific notification
-  Future<void> cancel(int id) async {
-    await _notificationsPlugin.cancel(id);
+  Future<void> cancelProgress(String taskId) =>
+      _safe(() => _plugin.cancel(progressIdFor(taskId)));
+
+  Future<void> cancelAll(String taskId) async {
+    await _safe(() => _plugin.cancel(progressIdFor(taskId)));
+    await _safe(() => _plugin.cancel(resultIdFor(taskId)));
+  }
+
+  Future<void> _safe(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      developer.log('Notification error: $e');
+    }
   }
 }

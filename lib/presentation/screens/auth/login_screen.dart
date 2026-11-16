@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../bloc/auth/auth_bloc.dart';
 import '../../bloc/auth/auth_event.dart';
 import '../../bloc/auth/auth_state.dart';
-import '../dashboard/main_navigation_screen.dart';
+import '../../widgets/common_widgets.dart';
+import '../../widgets/decorations.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,429 +17,208 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isRegisterMode = false;
+  bool _register = false;
+  bool _obscure = true;
+  String? _error;
 
-  final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'admin');
-  final _confirmPasswordController = TextEditingController();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+
+  static final _usernamePattern = RegExp(r'^[A-Za-z0-9_.\-]{3,32}$');
 
   @override
   void dispose() {
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _confirmPasswordController.dispose();
+    _username.dispose();
+    _password.dispose();
+    _confirm.dispose();
     super.dispose();
   }
 
   void _submit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      final username = _usernameController.text.trim();
-      final password = _passwordController.text.trim();
-
-      if (_isRegisterMode) {
-        if (password != _confirmPasswordController.text.trim()) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Passwords do not match!'),
-              backgroundColor: AppColors.failed,
-            ),
-          );
-          return;
-        }
-        context.read<AuthBloc>().add(
-              RegisterSubmitted(username: username, password: password),
-            );
-      } else {
-        context.read<AuthBloc>().add(
-              LoginSubmitted(username: username, password: password),
-            );
-      }
-    }
+    FocusScope.of(context).unfocus();
+    setState(() => _error = null);
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    final u = _username.text.trim();
+    final p = _password.text;
+    context.read<AuthBloc>().add(
+          _register ? RegisterSubmitted(username: u, password: p) : LoginSubmitted(username: u, password: p),
+        );
   }
+
+  void _toggleMode() => setState(() {
+        _register = !_register;
+        _error = null;
+        _formKey.currentState?.reset();
+      });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B132B),
+      backgroundColor: AppColors.surface,
       body: BlocConsumer<AuthBloc, AuthState>(
         listener: (context, state) {
-          if (state is AuthAuthenticated) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-            );
-          } else if (state is AuthRegistrationSuccess) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.posOnline,
-              ),
-            );
-            setState(() => _isRegisterMode = false);
-          } else if (state is AuthFailure) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('AUTH ERROR: ${state.message}'),
-                backgroundColor: AppColors.failed,
-              ),
-            );
+          if (state is AuthFailure) setState(() => _error = state.message);
+          if (state is AuthRegistrationSuccess) {
+            if (_register) _toggleMode();
+            showAppSnack(context, state.message);
           }
         },
         builder: (context, state) {
-          final isLoading = state is AuthLoading;
-
-          return SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Container(
-                    padding: const EdgeInsets.all(28),
-                    decoration: BoxDecoration(
-                      color: AppColors.posDarkHeader,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF334155), width: 1.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Terminal Badge
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: const Color(0xFF475569)),
-                              ),
-                              child: const Text(
-                                'POS REGISTER #04 • AUTH SUBSYSTEM',
-                                style: TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Brand Header
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+          final loading = state is AuthLoading;
+          return Stack(
+            children: [
+              const Align(alignment: Alignment.bottomCenter, child: WaveBackdrop(height: 130)),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 120),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: AutofillGroup(
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.posAccent.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: AppColors.posAccent),
-                                ),
-                                child: const Icon(
-                                  Icons.point_of_sale_rounded,
-                                  color: Colors.white,
-                                  size: 28,
+                              Center(
+                                child: HaloIllustration(
+                                  icon: _register ? Icons.person_add_alt_1_rounded : Icons.shield_rounded,
+                                  size: 132,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              const SizedBox(height: 20),
+                              Text(
+                                _register ? 'Create Account' : 'Welcome Back!',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                _register
+                                    ? 'Register an operator account on the LAAN POS server'
+                                    : 'Sign in to continue to LAAN POS',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontSize: 14.5, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(height: 28),
+                              TextFormField(
+                                controller: _username,
+                                enabled: !loading,
+                                autofillHints: const [AutofillHints.username],
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
+                                  hintText: 'Username',
+                                  prefixIcon: Icon(Icons.person_outline_rounded),
+                                ),
+                                validator: (v) {
+                                  final s = v?.trim() ?? '';
+                                  if (s.isEmpty) return 'Enter your username';
+                                  if (_register && !_usernamePattern.hasMatch(s)) {
+                                    return '3–32 characters: letters, numbers, _ . -';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              TextFormField(
+                                controller: _password,
+                                enabled: !loading,
+                                obscureText: _obscure,
+                                autofillHints: [
+                                  _register ? AutofillHints.newPassword : AutofillHints.password,
+                                ],
+                                textInputAction: _register ? TextInputAction.next : TextInputAction.done,
+                                onFieldSubmitted: (_) => _register ? null : _submit(),
+                                decoration: InputDecoration(
+                                  hintText: 'Password',
+                                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                  suffixIcon: IconButton(
+                                    tooltip: _obscure ? 'Show password' : 'Hide password',
+                                    icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                                    onPressed: () => setState(() => _obscure = !_obscure),
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if ((v ?? '').isEmpty) return 'Enter your password';
+                                  if (_register && v!.length < 6) return 'Use at least 6 characters';
+                                  return null;
+                                },
+                              ),
+                              if (_register) ...[
+                                const SizedBox(height: 14),
+                                TextFormField(
+                                  controller: _confirm,
+                                  enabled: !loading,
+                                  obscureText: _obscure,
+                                  textInputAction: TextInputAction.done,
+                                  onFieldSubmitted: (_) => _submit(),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Confirm password',
+                                    prefixIcon: Icon(Icons.lock_reset_rounded),
+                                  ),
+                                  validator: (v) => v != _password.text ? 'Passwords do not match' : null,
+                                ),
+                              ],
+                              if (_error != null) ...[
+                                const SizedBox(height: 14),
+                                InlineMessage.error(_error!),
+                              ],
+                              const SizedBox(height: 22),
+                              FilledButton(
+                                onPressed: loading ? null : _submit,
+                                child: loading
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                                      )
+                                    : Text(_register ? 'Create account' : 'Login'),
+                              ),
+                              const SizedBox(height: 14),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   Text(
-                                    'LAAN POS SAAS',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.5,
-                                    ),
+                                    _register ? 'Already have an account?' : "Don't have an account?",
+                                    style: const TextStyle(color: AppColors.textSecondary),
                                   ),
-                                  Text(
-                                    'TRANSFER & SYNC SUBSYSTEM',
-                                    style: TextStyle(
-                                      color: Color(0xFF94A3B8),
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.3,
+                                  TextButton(
+                                    onPressed: loading ? null : _toggleMode,
+                                    child: Text(_register ? 'Log in' : 'Register'),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.dns_outlined, size: 14, color: AppColors.textMuted),
+                                  SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      ApiConstants.defaultBaseUrl,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                                     ),
                                   ),
                                 ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
-
-                          // Server Node Telemetry Box
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: const Color(0xFF1E293B)),
-                            ),
-                            child: const Row(
-                              children: [
-                                Icon(Icons.cloud_sync_rounded,
-                                    size: 14, color: AppColors.posAccent),
-                                SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    'MOCK SERVER: ${ApiConstants.defaultBaseUrl}',
-                                    style: TextStyle(
-                                      color: Color(0xFFCBD5E1),
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Mode Switcher: LOGIN vs REGISTER (As per Assessment Requirement)
-                          Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0F172A),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(4),
-                                    onTap: () => setState(() => _isRegisterMode = false),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: !_isRegisterMode
-                                            ? AppColors.posAccent
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'LOG IN',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: !_isRegisterMode
-                                              ? Colors.white
-                                              : const Color(0xFF94A3B8),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(4),
-                                    onTap: () => setState(() => _isRegisterMode = true),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: _isRegisterMode
-                                            ? AppColors.posAccent
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: Text(
-                                        'REGISTER FIRST',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: _isRegisterMode
-                                              ? Colors.white
-                                              : const Color(0xFF94A3B8),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-
-                          // Username / Operator ID
-                          TextFormField(
-                            controller: _usernameController,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w600,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: _isRegisterMode
-                                  ? 'NEW USERNAME / OPERATOR ID'
-                                  : 'OPERATOR ID / USERNAME',
-                              labelStyle: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                              prefixIcon:
-                                  const Icon(Icons.badge_rounded, color: Color(0xFF94A3B8)),
-                              fillColor: const Color(0xFF1E293B),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(color: Color(0xFF334155)),
-                              ),
-                            ),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 14),
-
-                          // Password / Operator Passcode
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w600,
-                            ),
-                            decoration: InputDecoration(
-                              labelText: _isRegisterMode
-                                  ? 'CHOOSE PASSWORD'
-                                  : 'SECURITY PIN / PASSWORD',
-                              labelStyle: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                              prefixIcon:
-                                  const Icon(Icons.lock_rounded, color: Color(0xFF94A3B8)),
-                              fillColor: const Color(0xFF1E293B),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(color: Color(0xFF334155)),
-                              ),
-                            ),
-                            validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                          ),
-
-                          // Confirm Password field for Register mode
-                          if (_isRegisterMode) ...[
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _confirmPasswordController,
-                              obscureText: true,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'monospace',
-                                fontWeight: FontWeight.w600,
-                              ),
-                              decoration: InputDecoration(
-                                labelText: 'CONFIRM PASSWORD',
-                                labelStyle: const TextStyle(
-                                  color: Color(0xFF94A3B8),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.5,
-                                ),
-                                prefixIcon: const Icon(Icons.lock_outline_rounded,
-                                    color: Color(0xFF94A3B8)),
-                                fillColor: const Color(0xFF1E293B),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                  borderSide: const BorderSide(color: Color(0xFF334155)),
-                                ),
-                              ),
-                              validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-                            ),
-                          ],
-
-                          const SizedBox(height: 22),
-
-                          // Submit Action Button
-                          ElevatedButton(
-                            onPressed: isLoading ? null : _submit,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isRegisterMode
-                                  ? AppColors.posOrange
-                                  : AppColors.posAccent,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            child: isLoading
-                                ? const SizedBox(
-                                    height: 18,
-                                    width: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : Text(
-                                    _isRegisterMode
-                                        ? 'REGISTER ACCOUNT & SIGN IN ➔'
-                                        : 'AUTHENTICATE & GET TOKEN ➔',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Quick Demo Operator Bypass
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFF94A3B8),
-                              side: const BorderSide(color: Color(0xFF334155)),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                            ),
-                            onPressed: () {
-                              Navigator.of(context).pushReplacement(
-                                MaterialPageRoute(
-                                  builder: (_) => const MainNavigationScreen(),
-                                ),
-                              );
-                            },
-                            child: const Text(
-                              'DEMO TERMINAL OFFLINE MODE',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           );
         },
       ),

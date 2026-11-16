@@ -1,5 +1,8 @@
 import 'package:dio/dio.dart';
+
+import '../../core/errors/transfer_exception.dart';
 import '../../domain/entities/remote_file.dart';
+import '../../domain/entities/upload_result.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../../domain/repositories/transfer_repository.dart';
 import '../datasources/transfer_remote_datasource.dart';
@@ -15,87 +18,77 @@ class TransferRepositoryImpl implements TransferRepository {
     required this.authRepository,
   });
 
-  Future<String> _getToken() async {
+  Future<String> _token() async {
     final token = await authRepository.getSavedToken();
     if (token == null || token.isEmpty) {
-      throw Exception('User is not authenticated. Please log in first.');
+      throw const TransferException(
+        TransferErrorKind.unauthorized,
+        'You are not logged in. Please log in again.',
+      );
     }
     return token;
   }
 
-  @override
-  Future<List<RemoteFile>> getRemoteFiles() async {
-    final token = await _getToken();
-    return await remoteDataSource.getRemoteFiles(token);
+  Future<T> _tracked<T>(String taskId, Future<T> Function(CancelToken) run) async {
+    final cancelToken = CancelToken();
+    _cancelTokens[taskId] = cancelToken;
+    try {
+      return await run(cancelToken);
+    } finally {
+      if (identical(_cancelTokens[taskId], cancelToken)) _cancelTokens.remove(taskId);
+    }
   }
 
   @override
-  Future<void> uploadFile({
+  Future<List<RemoteFile>> getRemoteFiles() async =>
+      remoteDataSource.getRemoteFiles(await _token());
+
+  @override
+  Future<UploadResult> uploadFile({
     required String taskId,
     required String filePath,
-    required Function(int sentBytes, int totalBytes) onProgress,
+    required String fileName,
+    required void Function(int, int) onProgress,
   }) async {
-    final token = await _getToken();
-    final cancelToken = CancelToken();
-    _cancelTokens[taskId] = cancelToken;
-
-    try {
-      await remoteDataSource.uploadFile(
+    final token = await _token();
+    return _tracked(
+      taskId,
+      (ct) => remoteDataSource.uploadFile(
         token: token,
         filePath: filePath,
-        cancelToken: cancelToken,
+        fileName: fileName,
+        cancelToken: ct,
         onProgress: onProgress,
-      );
-    } finally {
-      _cancelTokens.remove(taskId);
-    }
+      ),
+    );
   }
 
   @override
   Future<void> downloadFile({
     required String taskId,
-    required String fileName,
-    required String savePath,
-    required int startByte,
-    required Function(int receivedBytes, int totalBytes) onProgress,
+    required String remoteName,
+    required String partialPath,
+    required void Function(int, int) onProgress,
+    String? url,
   }) async {
-    final token = await _getToken();
-    final cancelToken = CancelToken();
-    _cancelTokens[taskId] = cancelToken;
-
-    try {
-      await remoteDataSource.downloadFile(
+    final token = await _token();
+    return _tracked(
+      taskId,
+      (ct) => remoteDataSource.downloadFile(
         token: token,
-        fileName: fileName,
-        savePath: savePath,
-        startByte: startByte,
-        cancelToken: cancelToken,
+        remoteName: remoteName,
+        partialPath: partialPath,
+        cancelToken: ct,
         onProgress: onProgress,
-      );
-    } finally {
-      _cancelTokens.remove(taskId);
-    }
+        url: url,
+      ),
+    );
   }
 
   @override
-  void pauseTransfer(String taskId) {
-    if (_cancelTokens.containsKey(taskId)) {
-      _cancelTokens[taskId]?.cancel('Paused by user');
-      _cancelTokens.remove(taskId);
-    }
-  }
+  void abort(String taskId) => _cancelTokens.remove(taskId)?.cancel('aborted');
 
   @override
-  void cancelTransfer(String taskId) {
-    if (_cancelTokens.containsKey(taskId)) {
-      _cancelTokens[taskId]?.cancel('Cancelled by user');
-      _cancelTokens.remove(taskId);
-    }
-  }
-
-  @override
-  Future<void> deleteRemoteFile(String fileName) async {
-    final token = await _getToken();
-    await remoteDataSource.deleteRemoteFile(token, fileName);
-  }
+  Future<void> deleteRemoteFile(String fileName) async =>
+      remoteDataSource.deleteRemoteFile(await _token(), fileName);
 }

@@ -1,26 +1,33 @@
-import 'dart:io';
-import 'package:dio/dio.dart';
-import '../../core/constants/api_constants.dart';
-import '../models/remote_file_model.dart';
 import 'dart:developer' as developer;
+import 'dart:io';
+
+import 'package:dio/dio.dart';
+
+import '../../core/constants/api_constants.dart';
+import '../../core/errors/transfer_exception.dart';
+import '../../domain/entities/upload_result.dart';
+import '../models/remote_file_model.dart';
+
+typedef ProgressCallback = void Function(int done, int total);
 
 abstract class TransferRemoteDataSource {
   Future<List<RemoteFileModel>> getRemoteFiles(String token);
 
-  Future<void> uploadFile({
+  Future<UploadResult> uploadFile({
     required String token,
     required String filePath,
+    required String fileName,
     required CancelToken cancelToken,
-    required Function(int sent, int total) onProgress,
+    required ProgressCallback onProgress,
   });
 
   Future<void> downloadFile({
     required String token,
-    required String fileName,
-    required String savePath,
-    required int startByte,
+    required String remoteName,
+    required String partialPath,
     required CancelToken cancelToken,
-    required Function(int received, int total) onProgress,
+    required ProgressCallback onProgress,
+    String? url,
   });
 
   Future<void> deleteRemoteFile(String token, String fileName);
@@ -31,169 +38,158 @@ class TransferRemoteDataSourceImpl implements TransferRemoteDataSource {
 
   TransferRemoteDataSourceImpl({required this.dio});
 
+  Options _auth(String token, {ResponseType? responseType, Map<String, dynamic>? extra}) =>
+      Options(
+        headers: {'Authorization': 'Bearer $token', ...?extra},
+        responseType: responseType,
+      );
+
   @override
   Future<List<RemoteFileModel>> getRemoteFiles(String token) async {
     try {
       final response = await dio.get(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.getFilesEndpoint}',
-        options: Options(
-          headers: {'Authorization': 'Bearer $token'},
-          responseType: ResponseType.json,
-        ),
+        ApiConstants.getFilesEndpoint,
+        options: _auth(token, responseType: ResponseType.json),
       );
-
-      developer.log('Get files response: ${response.data}');
-
-      final List<RemoteFileModel> files = [];
-
-      if (response.data is List) {
-        for (var item in response.data) {
-          if (item is String) {
-            files.add(RemoteFileModel(name: item, size: 0));
-          } else if (item is Map) {
-            files.add(RemoteFileModel.fromJson(Map<String, dynamic>.from(item)));
-          }
-        }
-      } else if (response.data is Map) {
-        final map = response.data as Map;
-        final list = map['files'] ?? map['data'] ?? map['items'];
-        if (list is List) {
-          for (var item in list) {
-            if (item is String) {
-              files.add(RemoteFileModel(name: item, size: 0));
-            } else if (item is Map) {
-              files.add(RemoteFileModel.fromJson(Map<String, dynamic>.from(item)));
-            }
-          }
-        }
-      }
-      return files;
-    } on DioException catch (e) {
-      developer.log('Error fetching files: ${e.message}');
-      throw Exception('Failed to load files: ${e.message}');
+      final data = response.data;
+      final list = data is List
+          ? data
+          : (data is Map ? (data['files'] ?? data['data'] ?? data['items']) : null);
+      if (list is! List) return const [];
+      return list
+          .map<RemoteFileModel?>((item) {
+            if (item is String) return RemoteFileModel(name: item);
+            if (item is Map) return RemoteFileModel.fromJson(Map<String, dynamic>.from(item));
+            return null;
+          })
+          .whereType<RemoteFileModel>()
+          .toList();
+    } catch (e) {
+      throw TransferException.fromError(e);
     }
   }
 
   @override
-  Future<void> uploadFile({
+  Future<UploadResult> uploadFile({
     required String token,
     required String filePath,
+    required String fileName,
     required CancelToken cancelToken,
-    required Function(int sent, int total) onProgress,
+    required ProgressCallback onProgress,
   }) async {
     final file = File(filePath);
     if (!await file.exists()) {
-      throw Exception('Local file does not exist: $filePath');
+      throw const TransferException(
+        TransferErrorKind.invalidFile,
+        'The selected file no longer exists on this device.',
+      );
+    }
+    final totalSize = await file.length();
+    if (totalSize == 0) {
+      throw const TransferException(TransferErrorKind.invalidFile, 'The selected file is empty.');
     }
 
-    final fileName = file.uri.pathSegments.last;
-    final totalSize = await file.length();
-
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
-        filename: fileName,
-      ),
-    });
-
     try {
-      await dio.post(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.uploadEndpoint}',
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(filePath, filename: fileName),
+      });
+
+      final response = await dio.post(
+        ApiConstants.uploadEndpoint,
         data: formData,
         cancelToken: cancelToken,
-        options: Options(
-          headers: {
-            'Authorization': 'Bearer $token',
-          },
-          sendTimeout: ApiConstants.sendTimeout,
-        ),
-        onSendProgress: (sent, total) {
-          // If total is -1 (unknown chunked), use actual file size
-          final reportedTotal = (total > 0) ? total : totalSize;
-          onProgress(sent, reportedTotal);
-        },
+        options: _auth(token).copyWith(sendTimeout: ApiConstants.sendTimeout),
+        onSendProgress: (sent, total) => onProgress(sent, total > 0 ? total : totalSize),
       );
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        developer.log('Upload cancelled or paused by user');
-        rethrow;
+
+      final data = response.data;
+      if (data is Map && data['success'] == false) {
+        throw TransferException(
+          TransferErrorKind.invalidFile,
+          TransferException.serverMessage(data) ?? 'The server rejected this file.',
+        );
       }
-      throw Exception('Upload failed: ${e.response?.data ?? e.message}');
+      return UploadResult.fromResponse(data, fallbackName: fileName);
+    } catch (e) {
+      throw TransferException.fromError(e);
     }
   }
 
   @override
   Future<void> downloadFile({
     required String token,
-    required String fileName,
-    required String savePath,
-    required int startByte,
+    required String remoteName,
+    required String partialPath,
     required CancelToken cancelToken,
-    required Function(int received, int total) onProgress,
+    required ProgressCallback onProgress,
+    String? url,
   }) async {
-    final file = File(savePath);
+    final directUrl = url != null && (url.startsWith('http://') || url.startsWith('https://'));
+    final partFile = File(partialPath);
+    int startByte = await partFile.exists() ? await partFile.length() : 0;
 
-    // If starting from byte 0, delete any existing partial file
-    if (startByte == 0 && await file.exists()) {
-      await file.delete();
-    }
-
-    // Set HTTP Range header for resumable download (-C -)
-    final headers = <String, dynamic>{
-      'Authorization': 'Bearer $token',
-    };
-
-    if (startByte > 0) {
-      headers['Range'] = 'bytes=$startByte-';
-      developer.log('Resuming download for $fileName from byte: $startByte');
-    }
-
+    RandomAccessFile? raf;
     try {
-      final response = await dio.get<ResponseBody>(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.getFilesEndpoint}',
-        queryParameters: {'file': fileName},
-        cancelToken: cancelToken,
-        options: Options(
-          headers: headers,
-          responseType: ResponseType.stream,
-          receiveTimeout: ApiConstants.receiveTimeout,
-        ),
-      );
-
-      final responseBody = response.data;
-      if (responseBody == null) {
-        throw Exception('Server returned empty response body');
-      }
-
-      // Determine total content length
-      final contentLengthHeader = response.headers.value(Headers.contentLengthHeader);
-      int contentLength = int.tryParse(contentLengthHeader ?? '0') ?? 0;
-      final int totalLength = startByte + contentLength;
-
-      // Open file stream in write/append mode
-      final fileAccessMode = startByte > 0 ? FileMode.writeOnlyAppend : FileMode.writeOnly;
-      final sink = file.openSync(mode: fileAccessMode);
-
-      int currentDownloaded = startByte;
-
+      final Response<ResponseBody> response;
       try {
-        await for (final chunk in responseBody.stream) {
-          if (cancelToken.isCancelled) {
-            break;
-          }
-          sink.writeFromSync(chunk);
-          currentDownloaded += chunk.length;
-          onProgress(currentDownloaded, totalLength > 0 ? totalLength : currentDownloaded);
-        }
-      } finally {
-        await sink.close();
-      }
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        developer.log('Download paused or cancelled');
+        response = await dio.get<ResponseBody>(
+          directUrl ? url : ApiConstants.getFilesEndpoint,
+          queryParameters: directUrl ? null : {'file': remoteName},
+          cancelToken: cancelToken,
+          options: _auth(
+            token,
+            responseType: ResponseType.stream,
+            extra: startByte > 0 ? {'Range': 'bytes=$startByte-'} : null,
+          ).copyWith(receiveTimeout: ApiConstants.receiveTimeout),
+        );
+      } on DioException catch (e) {
+        if (e.response?.statusCode == 416 && startByte > 0) return;
         rethrow;
       }
-      throw Exception('Download failed: ${e.message}');
+
+      final body = response.data;
+      if (body == null) {
+        throw const TransferException(TransferErrorKind.server, 'Server returned an empty response.');
+      }
+
+      final contentLength = int.tryParse(response.headers.value(Headers.contentLengthHeader) ?? '') ?? -1;
+      int total;
+      if (response.statusCode == 206) {
+        final range = response.headers.value('content-range');
+        final totalFromRange = int.tryParse(range?.split('/').last ?? '');
+        total = totalFromRange ?? (contentLength >= 0 ? startByte + contentLength : -1);
+      } else {
+        if (startByte > 0) {
+          developer.log('Server ignored Range for $remoteName; restarting from 0');
+        }
+        startByte = 0;
+        total = contentLength;
+      }
+
+      await partFile.parent.create(recursive: true);
+      raf = await partFile.open(mode: startByte > 0 ? FileMode.append : FileMode.write);
+      int received = startByte;
+      onProgress(received, total);
+
+      await for (final chunk in body.stream) {
+        if (cancelToken.isCancelled) break;
+        await raf.writeFrom(chunk);
+        received += chunk.length;
+        onProgress(received, total > 0 ? total : received);
+      }
+
+      if (cancelToken.isCancelled) throw TransferException.cancelled;
+      if (total > 0 && received < total) {
+        throw const TransferException(
+          TransferErrorKind.noConnection,
+          'Connection dropped before the download finished.',
+        );
+      }
+    } catch (e) {
+      if (cancelToken.isCancelled) throw TransferException.cancelled;
+      throw TransferException.fromError(e);
+    } finally {
+      await raf?.close();
     }
   }
 
@@ -201,14 +197,12 @@ class TransferRemoteDataSourceImpl implements TransferRemoteDataSource {
   Future<void> deleteRemoteFile(String token, String fileName) async {
     try {
       await dio.delete(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.deleteEndpoint}',
+        ApiConstants.deleteEndpoint,
         queryParameters: {'file': fileName},
-        options: Options(
-          headers: {'Authorization': 'Bearer $token'},
-        ),
+        options: _auth(token),
       );
-    } on DioException catch (e) {
-      throw Exception('Delete failed: ${e.message}');
+    } catch (e) {
+      throw TransferException.fromError(e);
     }
   }
 }

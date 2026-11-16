@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
+
 import '../../core/constants/api_constants.dart';
-import 'dart:developer' as developer;
+import '../../core/errors/transfer_exception.dart';
 
 abstract class AuthRemoteDataSource {
   Future<String> login(String username, String password);
@@ -12,28 +13,22 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 
   AuthRemoteDataSourceImpl({required this.dio});
 
+  Options get _formOptions => Options(contentType: Headers.formUrlEncodedContentType);
+
   @override
   Future<void> register(String username, String password) async {
     try {
       final response = await dio.post(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.registerEndpoint}',
-        data: {
-          'username': username,
-          'password': password,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-        ),
+        ApiConstants.registerEndpoint,
+        data: {'username': username, 'password': password},
+        options: _formOptions,
       );
-
-      developer.log('Register Response: ${response.statusCode} -> ${response.data}');
-
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception('Registration failed with status code ${response.statusCode}');
+      final data = response.data;
+      if (data is Map && data['success'] == false) {
+        throw Exception(TransferException.serverMessage(data) ?? 'Registration failed');
       }
     } on DioException catch (e) {
-      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Registration network error';
-      throw Exception('Registration failed: $errorMsg');
+      throw Exception(_authMessage(e, fallback: 'Registration failed'));
     }
   }
 
@@ -41,30 +36,28 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
   Future<String> login(String username, String password) async {
     try {
       final response = await dio.post(
-        '${ApiConstants.defaultBaseUrl}${ApiConstants.tokenEndpoint}',
-        data: {
-          'username': username,
-          'password': password,
-        },
-        options: Options(
-          contentType: Headers.formUrlEncodedContentType,
-        ),
+        ApiConstants.tokenEndpoint,
+        data: {'username': username, 'password': password},
+        options: _formOptions,
       );
-
-      developer.log('Login Response: ${response.statusCode} -> ${response.data}');
-
-      if (response.statusCode == 200) {
-        if (response.data is Map) {
-          final data = response.data as Map;
-          return (data['access_token'] ?? data['token'] ?? data['accessToken'] ?? '').toString();
-        } else if (response.data is String) {
-          return response.data.toString();
-        }
+      final data = response.data;
+      String token = '';
+      if (data is Map) {
+        token = (data['access_token'] ?? data['token'] ?? data['accessToken'] ?? '').toString();
+      } else if (data is String) {
+        token = data.trim();
       }
-      throw Exception('Failed to obtain token: ${response.statusCode}');
+      if (token.isEmpty) throw Exception('Server did not return a token');
+      return token;
     } on DioException catch (e) {
-      final errorMsg = e.response?.data?.toString() ?? e.message ?? 'Network error';
-      throw Exception('Authentication failed: $errorMsg');
+      throw Exception(_authMessage(e, fallback: 'Login failed'));
     }
+  }
+
+  String _authMessage(DioException e, {required String fallback}) {
+    final serverMsg = TransferException.serverMessage(e.response?.data);
+    if (serverMsg != null) return serverMsg;
+    final mapped = TransferException.fromDio(e);
+    return mapped.kind == TransferErrorKind.unknown ? fallback : mapped.message;
   }
 }

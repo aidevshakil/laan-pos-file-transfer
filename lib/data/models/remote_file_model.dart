@@ -9,22 +9,19 @@ class RemoteFileModel extends RemoteFile {
   });
 
   factory RemoteFileModel.fromJson(Map<String, dynamic> json) {
+    final rawSize = json['size'] ?? json['bytes'] ?? json['length'];
+    final rawTime = json['modified'] ?? json['updated_at'] ?? json['mtime'] ?? json['created_at'];
+    DateTime? time;
+    if (rawTime is num) {
+      time = DateTime.fromMillisecondsSinceEpoch(rawTime.toInt() * 1000);
+    } else if (rawTime != null) {
+      time = DateTime.tryParse(rawTime.toString());
+    }
     return RemoteFileModel(
-      name: json['name']?.toString() ?? json['filename']?.toString() ?? 'unknown',
-      size: (json['size'] is num) ? (json['size'] as num).toInt() : 0,
+      name: (json['name'] ?? json['filename'] ?? json['file'] ?? 'unknown').toString(),
+      size: rawSize is num ? rawSize.toInt() : int.tryParse('${rawSize ?? ''}') ?? 0,
       url: json['url']?.toString(),
-      modifiedTime: json['updated_at'] != null || json['modified'] != null
-          ? DateTime.tryParse(json['updated_at']?.toString() ?? json['modified']?.toString() ?? '')
-          : null,
+      modifiedTime: time,
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'name': name,
-      'size': size,
-      'url': url,
-      'modified': modifiedTime?.toIso8601String(),
-    };
   }
 }
